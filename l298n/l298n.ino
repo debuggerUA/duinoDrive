@@ -1,3 +1,5 @@
+#include <Ultrasonic.h>
+
 #define PIN_ENA 9
 #define PIN_ENB 3
 #define PIN_IN1 7
@@ -5,11 +7,20 @@
 #define PIN_IN3 5
 #define PIN_IN4 4
 
-#define MAX_POWER 125
+#define DRIVE_POWER 125
+#define SLOW_DRIVE_POWER 75
+#define STEERING_POWER 100
+uint8_t testDrivePower = DRIVE_POWER;
 
-#define MINIMUM_POWER 50
+#define FAR_AWAY 200 //cm
+#define NOT_FAR_AWAY 50 //cm
 
-uint8_t power = MINIMUM_POWER;
+#define LEFT 1
+#define RIGHT 2
+
+int previousObstacleDistance = -1;
+
+Ultrasonic ultrasonic(10, 11, 40000UL);
 
 void setup() {
 
@@ -24,57 +35,63 @@ void setup() {
 }
 
 void loop() {
-  power = MINIMUM_POWER;
-  while(power < MAX_POWER) {
-    mainForward(power);
-    secondaryForward(power);
-
-    delay(1000);
-    power += 25;
-  }
-
   allStop();
-  delay(250);
+  int forwardDistance = ultrasonic.read();
+  
+  if (forwardDistance >= FAR_AWAY) {
+    // go forward for a FAR_AWAY distance
+    driveForward(DRIVE_POWER);
+    delay(1500);
+  } else if (forwardDistance >= NOT_FAR_AWAY) {
+    // go forward for about half of NOT_FAR_AWAY distance
+    driveForward(SLOW_DRIVE_POWER);
+    delay(1500);
+  } else {
 
-  power = MAX_POWER;
-
-  while(power > MINIMUM_POWER) {
-
-    mainBackward(power);
-    secondaryBackward(power);
-
-    delay(1000);
-
-    power -= 25;
-
+    if (previousObstacleDistance < 0) {
+      // we are too close to the obstacle (for a first time)
+      // lets check try driving left or right for a while
+      previousObstacleDistance = forwardDistance;    
+      if (random(LEFT, RIGHT+1) == LEFT) steerLeft();
+      else steerRight();
+      driveForward(SLOW_DRIVE_POWER);
+      delay(1000);
+    } else {
+      if (forwardDistance <= previousObstacleDistance) {
+        // didn't help, lets try driving backwards
+        driveBackward(SLOW_DRIVE_POWER);
+        previousObstacleDistance = -1;
+      }
+    }
   }
 }
 
 void allStop() {
   mainStop();
   secondaryStop();
+  delay(100);
 }
 
-void mainForward(int withPower) {
+void driveForward(int withPower) {
   analogWrite(PIN_ENA, withPower);
   digitalWrite(PIN_IN1, HIGH);
   digitalWrite(PIN_IN2, LOW);
 }
 
-void mainBackward(int withPower) {
+void driveBackward(int withPower) {
   analogWrite(PIN_ENA, withPower);
   digitalWrite(PIN_IN1, LOW);
   digitalWrite(PIN_IN2, HIGH);
 }
 
-void secondaryBackward(int withPower) {
-  analogWrite(PIN_ENB, withPower);
+void steerLeft() {
+  analogWrite(PIN_ENB, STEERING_POWER);
   digitalWrite(PIN_IN3, LOW);
   digitalWrite(PIN_IN4, HIGH);
 }
 
-void secondaryForward(int withPower) {
-  analogWrite(PIN_ENB, withPower);
+void steerRight() {
+  analogWrite(PIN_ENB, STEERING_POWER);
   digitalWrite(PIN_IN3, HIGH);
   digitalWrite(PIN_IN4, LOW);
 }
@@ -87,4 +104,18 @@ void mainStop() {
 void secondaryStop() {
   digitalWrite(PIN_IN3, LOW);
   digitalWrite(PIN_IN4, LOW);
+}
+
+void testRun() {
+  driveForward(DRIVE_POWER);
+  delay(1000);
+  allStop();
+  driveBackward(SLOW_DRIVE_POWER);
+  delay(1000);
+  steerLeft();
+  delay(500);
+  allStop();
+  steerRight();
+  delay(500);
+  allStop();
 }
